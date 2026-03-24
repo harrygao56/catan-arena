@@ -36,7 +36,7 @@ class Player {
 
    public:
     Player(PlayerColor color);
-    ~Player();
+    virtual ~Player();
     Player& operator=(const Player& other);
     Player(const Player& other);
 
@@ -44,7 +44,7 @@ class Player {
      * @brief play a turn of the player
      * Will ask the player to choose an action to do in his turn until the input is valid and he ends his turn
      */
-    void play_turn(Catan& game);
+    virtual void play_turn(Catan& game);
 
     /**
      * @brief Get the color of the player (RED, BLUE, YELLOW)
@@ -74,17 +74,17 @@ class Player {
     void add_resource(resource resource, int count);
     void use_resource(resource resource, int count);
     void display_resources() const;
-    void robber();
+    virtual void robber();
 
-    int place_settlement(Catan& game, bool first_round = false);
-    void place_road(Catan& game, bool first_round = false);
-    void place_city(Catan& game);
+    virtual int place_settlement(Catan& game, bool first_round = false);
+    virtual void place_road(Catan& game, bool first_round = false);
+    virtual void place_city(Catan& game);
 
     /**
      * @brief make a trade with the other players. will ask the user to choose the resources and development cards to offer and request
      * @param game the game object
      */
-    void make_trade(Catan& game);
+    virtual void make_trade(Catan& game);
 
     /**
      * @brief get the trade offer from other player (from stdin)
@@ -95,7 +95,7 @@ class Player {
      * @param request_dev the development cards that the trader requests
      * @return true if the player accepts the trade, false otherwise
      */
-    bool trade_request(Player& trader, const vector<pair<resource, int>>& offer_res, const vector<Card*>& offer_dev, const vector<pair<resource, int>>& request_res, const vector<pair<CardType, int>>& request_dev);
+    virtual bool trade_request(Player& trader, const vector<pair<resource, int>>& offer_res, const vector<Card*>& offer_dev, const vector<pair<resource, int>>& request_res, const vector<pair<CardType, int>>& request_dev);
 
     void display_dev_cards() const;
 
@@ -103,7 +103,7 @@ class Player {
      * @brief ask the user to choose a dev card to use
      * @param game the game object (will be pass to the play_dev_card function that actually use the dev card)
      */
-    void play_dev_card(Catan& game);
+    virtual void play_dev_card(Catan& game);
     /**
      * @brief use the dev card
      * @param game the game object
@@ -115,7 +115,7 @@ class Player {
     /**
      * @brief buy a dev card for the player
      */
-    void buy_dev_card(Catan& game);
+    virtual void buy_dev_card(Catan& game);
 
     /**
      * @brief return the first dev card of the given type

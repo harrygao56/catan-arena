@@ -16,6 +16,7 @@ Catan::Catan(Player& player1, Player& player2, Player& player3)
     // initialize the random seed
     srand(time(nullptr));
     current_player_index = 0;
+    last_dice_sum = 0;
 
     // initialize the vertices
     for (int i = 0; i < NUM_VERTICES; i++) {
@@ -392,6 +393,7 @@ void Catan::roll_dice() {
     int dice_1 = rand() % 6 + 1;
     int dice_2 = rand() % 6 + 1;
     int sum = dice_1 + dice_2;
+    last_dice_sum = sum;
 
     std::cout << "Dice 1: " << dice_1
               << "\nDice 2: " << dice_2
@@ -402,6 +404,97 @@ void Catan::roll_dice() {
     } else {
         give_resources(sum);
     }
+}
+
+vector<int> Catan::get_legal_settlement_spots(Player& player, bool first_round) {
+    vector<int> result;
+    for (int i = 0; i < NUM_VERTICES; i++) {
+        LandVertex& v = vertices[i];
+        if (v.get_owner() != nullptr) continue;
+
+        // Check no adjacent settlements
+        bool adjacent_settlement = false;
+        for (int j = 0; j < 3; j++) {
+            LandVertex* adj = v.get_adjacent_vertex(j);
+            if (adj != nullptr && adj->get_owner() != nullptr) {
+                adjacent_settlement = true;
+                break;
+            }
+        }
+        if (adjacent_settlement) continue;
+
+        if (!first_round) {
+            // Must have an adjacent road belonging to this player
+            bool has_road = false;
+            for (int j = 0; j < 3; j++) {
+                RoadEdge* e = v.get_adjacent_edge(j);
+                if (e != nullptr && e->get_owner() == &player) {
+                    has_road = true;
+                    break;
+                }
+            }
+            if (!has_road) continue;
+        }
+
+        result.push_back(i);
+    }
+    return result;
+}
+
+vector<int> Catan::get_legal_road_spots(Player& player, bool first_round) {
+    (void)first_round;  // same logic for both cases
+    vector<int> result;
+    for (int i = 0; i < NUM_EDGES; i++) {
+        RoadEdge& e = edges[i];
+        if (e.get_owner() != nullptr) continue;
+
+        bool connected = false;
+
+        // Check adjacent vertices owned by player
+        for (int j = 0; j < 2; j++) {
+            LandVertex* v = e.get_adjacent_vertex(j);
+            if (v != nullptr && v->get_owner() == &player) {
+                connected = true;
+                break;
+            }
+        }
+
+        if (!connected) {
+            // Check adjacent edges owned by player
+            for (int j = 0; j < 4; j++) {
+                RoadEdge* adj = e.get_adjacent_edge(j);
+                if (adj != nullptr && adj->get_owner() == &player) {
+                    connected = true;
+                    break;
+                }
+            }
+        }
+
+        if (connected) result.push_back(i);
+    }
+    return result;
+}
+
+vector<int> Catan::get_legal_city_spots(Player& player) {
+    vector<int> result;
+    if (player.get_resource_count(resource::WHEAT) < 2 ||
+        player.get_resource_count(resource::STONE) < 3) {
+        return result;
+    }
+    for (int i = 0; i < NUM_VERTICES; i++) {
+        LandVertex& v = vertices[i];
+        if (v.get_owner() == &player && !v.is_contains_city()) {
+            result.push_back(i);
+        }
+    }
+    return result;
+}
+
+bool Catan::can_buy_dev_card(Player& player) {
+    return !dev_cards.empty() &&
+           player.get_resource_count(resource::WHEAT) >= 1 &&
+           player.get_resource_count(resource::STONE) >= 1 &&
+           player.get_resource_count(resource::SHEEP) >= 1;
 }
 
 void Catan::give_resources(int dices_sum) {

@@ -11,7 +11,7 @@ TIDY_FLAGS=-checks=bugprone-*,clang-analyzer-*,cppcoreguidelines-*,performance-*
 
 PROG=main
 
-.PHONY: clean run tidy test valgrind catan game_piece player cards
+.PHONY: clean run tidy test valgrind catan game_piece player cards headless
 
 main: Catan.o main.o game_piece player cards
 	$(CXX) $(CXXFLAGS) -o main Catan.o main.o $(GAME_PIECE_OBJECTS) $(PLAYER_OBJECTS) $(CARDS_OBJECTS)
@@ -59,8 +59,29 @@ cards:
 	make -C cards all
 
 
+HEADLESS_PROG=headless_catan
+HEADLESS_CXX=g++
+HEADLESS_FLAGS=-std=c++17 -g -Wall -I.
+
+HEADLESS_ALL_SRCS=\
+	Catan.cpp \
+	game_piece/LandVertex.cpp \
+	game_piece/RoadEdge.cpp \
+	player/Player.cpp \
+	cards/KnightCard.cpp \
+	cards/MonopolyCard.cpp \
+	cards/RoadBuildCard.cpp \
+	cards/VictoryPointCard.cpp \
+	cards/YearOfPlentyCard.cpp \
+	headless/HeadlessPlayer.cpp \
+	headless/headless_main.cpp
+
+headless:
+	$(HEADLESS_CXX) $(HEADLESS_FLAGS) -o $(HEADLESS_PROG) $(HEADLESS_ALL_SRCS)
+
 clean:
-	rm -f *.o $(PROG) 
+	rm -f *.o $(PROG) $(HEADLESS_PROG) Catan_headless.o
+	rm -f headless/*.o
 	make -C game_piece clean
 	make -C player clean
 	make -C cards clean
