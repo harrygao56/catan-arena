@@ -737,3 +737,33 @@ void Player::robber() {
         break;
     }
 }
+
+resource Player::choose_monopoly_resource(Catan& /*game*/) {
+    cout << "Choose a resource type to monopolize:\n"
+         << "\t1. Wood\n"
+         << "\t2. Clay\n"
+         << "\t3. Sheep\n"
+         << "\t4. Wheat\n"
+         << "\t5. Stone\n";
+    int resource_type = 0;
+    std::cin >> resource_type;
+    if (resource_type < 1 || resource_type > 5) {
+        throw std::invalid_argument("Invalid resource choice");
+    }
+    return resource::from_int(resource_type - 1);
+}
+
+std::pair<resource, resource> Player::choose_year_of_plenty_resources(Catan& /*game*/) {
+    cout << "Choose two resources to gain from the bank.\n"
+         << "\t1. Wood\n"
+         << "\t2. Clay\n"
+         << "\t3. Sheep\n"
+         << "\t4. Wheat\n"
+         << "\t5. Stone\n";
+    int r1 = 0, r2 = 0;
+    cin >> r1 >> r2;
+    if (r1 < 1 || r1 > 5 || r2 < 1 || r2 > 5) {
+        throw std::invalid_argument("Invalid resource choice");
+    }
+    return {resource::from_int(r1 - 1), resource::from_int(r2 - 1)};
+}

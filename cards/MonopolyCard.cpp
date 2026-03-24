@@ -22,21 +22,8 @@ Card* MonopolyCard::clone() const {
 
 void MonopolyCard::use(Catan& game, Player& player) {
     cout << "Player " << player.get_color() << " is playing Monopoly Card\n";
-    cout << "Choose a resource type to monopolize:\n"
-         << "\t1. Wood\n"
-         << "\t2. Clay\n"
-         << "\t3. Sheep\n"
-         << "\t4. Wheat\n"
-         << "\t5. Stone\n";
 
-    int resource_type = 0;
-    std::cin >> resource_type;
-
-    if (resource_type < 1 || resource_type > 5) {
-        throw std::invalid_argument("Invalid resource choice");
-    }
-
-    resource res = resource::from_int(resource_type - 1);
+    resource res = player.choose_monopoly_resource(game);
 
     for (int i = 0; i < NUM_PLAYERS; i++) {
         if (game.get_players()[i] == &player) {

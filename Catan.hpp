@@ -187,4 +187,19 @@ class Catan {
      * @brief Check if player can afford a dev card
      */
     bool can_buy_dev_card(Player& player);
+
+    /**
+     * @brief Check whether a settlement can be placed at the given vertex (geometry only, no resource check).
+     */
+    bool can_place_settlement(int vertex_id, Player& player, bool first_round = false);
+
+    /**
+     * @brief Check whether a road can be placed at the given edge (geometry only, no resource check).
+     */
+    bool can_place_road(int edge_id, Player& player, bool first_round = false);
+
+    /**
+     * @brief Check whether a city can be placed at the given vertex (geometry only, no resource check).
+     */
+    bool can_place_city(int vertex_id, Player& player);
 };

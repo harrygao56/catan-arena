@@ -35,9 +35,22 @@ class HeadlessPlayer : public Player {
     void play_dev_card(Catan& game) override;
     void buy_dev_card(Catan& game) override;
 
+    // ---- Choice overrides (called by card use() methods) ----
+    resource choose_monopoly_resource(Catan& game) override;
+    std::pair<resource, resource> choose_year_of_plenty_resources(Catan& game) override;
+
    private:
     std::ostream& proto_;   ///< JSON protocol output (real stdout)
     Catan* current_game_;   ///< Set at start of play_turn / place_settlement etc.
+
+    // ---- Pending state for dev card I/O decoupling ----
+    resource pending_monopoly_res_{resource::WOOD};
+    resource pending_yop_res1_{resource::WOOD};
+    resource pending_yop_res2_{resource::WOOD};
+    bool using_pending_roads_{false};
+    int pending_edge1_{-1};
+    int pending_edge2_{-1};
+    int pending_road_call_count_{0};
 
     // ---- JSON helpers ----
 

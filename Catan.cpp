@@ -406,71 +406,71 @@ void Catan::roll_dice() {
     }
 }
 
-vector<int> Catan::get_legal_settlement_spots(Player& player, bool first_round) {
-    vector<int> result;
-    for (int i = 0; i < NUM_VERTICES; i++) {
-        LandVertex& v = vertices[i];
-        if (v.get_owner() != nullptr) continue;
+bool Catan::can_place_settlement(int vertex_id, Player& player, bool first_round) {
+    if (vertex_id < 0 || vertex_id >= NUM_VERTICES) return false;
+    LandVertex& v = vertices[vertex_id];
+    if (v.get_owner() != nullptr) return false;
 
-        // Check no adjacent settlements
-        bool adjacent_settlement = false;
+    // Check no adjacent settlements
+    for (int j = 0; j < 3; j++) {
+        LandVertex* adj = v.get_adjacent_vertex(j);
+        if (adj != nullptr && adj->get_owner() != nullptr) return false;
+    }
+
+    if (!first_round) {
+        // Must have an adjacent road belonging to this player
+        bool has_road = false;
         for (int j = 0; j < 3; j++) {
-            LandVertex* adj = v.get_adjacent_vertex(j);
-            if (adj != nullptr && adj->get_owner() != nullptr) {
-                adjacent_settlement = true;
+            RoadEdge* e = v.get_adjacent_edge(j);
+            if (e != nullptr && e->get_owner() == &player) {
+                has_road = true;
                 break;
             }
         }
-        if (adjacent_settlement) continue;
+        if (!has_road) return false;
+    }
 
-        if (!first_round) {
-            // Must have an adjacent road belonging to this player
-            bool has_road = false;
-            for (int j = 0; j < 3; j++) {
-                RoadEdge* e = v.get_adjacent_edge(j);
-                if (e != nullptr && e->get_owner() == &player) {
-                    has_road = true;
-                    break;
-                }
-            }
-            if (!has_road) continue;
-        }
+    return true;
+}
 
-        result.push_back(i);
+bool Catan::can_place_road(int edge_id, Player& player, bool /*first_round*/) {
+    if (edge_id < 0 || edge_id >= NUM_EDGES) return false;
+    RoadEdge& e = edges[edge_id];
+    if (e.get_owner() != nullptr) return false;
+
+    // Check adjacent vertices owned by player
+    for (int j = 0; j < 2; j++) {
+        LandVertex* v = e.get_adjacent_vertex(j);
+        if (v != nullptr && v->get_owner() == &player) return true;
+    }
+
+    // Check adjacent edges owned by player
+    for (int j = 0; j < 4; j++) {
+        RoadEdge* adj = e.get_adjacent_edge(j);
+        if (adj != nullptr && adj->get_owner() == &player) return true;
+    }
+
+    return false;
+}
+
+bool Catan::can_place_city(int vertex_id, Player& player) {
+    if (vertex_id < 0 || vertex_id >= NUM_VERTICES) return false;
+    LandVertex& v = vertices[vertex_id];
+    return v.get_owner() == &player && !v.is_contains_city();
+}
+
+vector<int> Catan::get_legal_settlement_spots(Player& player, bool first_round) {
+    vector<int> result;
+    for (int i = 0; i < NUM_VERTICES; i++) {
+        if (can_place_settlement(i, player, first_round)) result.push_back(i);
     }
     return result;
 }
 
 vector<int> Catan::get_legal_road_spots(Player& player, bool first_round) {
-    (void)first_round;  // same logic for both cases
     vector<int> result;
     for (int i = 0; i < NUM_EDGES; i++) {
-        RoadEdge& e = edges[i];
-        if (e.get_owner() != nullptr) continue;
-
-        bool connected = false;
-
-        // Check adjacent vertices owned by player
-        for (int j = 0; j < 2; j++) {
-            LandVertex* v = e.get_adjacent_vertex(j);
-            if (v != nullptr && v->get_owner() == &player) {
-                connected = true;
-                break;
-            }
-        }
-
-        if (!connected) {
-            // Check adjacent edges owned by player
-            for (int j = 0; j < 4; j++) {
-                RoadEdge* adj = e.get_adjacent_edge(j);
-                if (adj != nullptr && adj->get_owner() == &player) {
-                    connected = true;
-                    break;
-                }
-            }
-        }
-
-        if (connected) result.push_back(i);
+        if (can_place_road(i, player, first_round)) result.push_back(i);
     }
     return result;
 }
@@ -482,10 +482,7 @@ vector<int> Catan::get_legal_city_spots(Player& player) {
         return result;
     }
     for (int i = 0; i < NUM_VERTICES; i++) {
-        LandVertex& v = vertices[i];
-        if (v.get_owner() == &player && !v.is_contains_city()) {
-            result.push_back(i);
-        }
+        if (can_place_city(i, player)) result.push_back(i);
     }
     return result;
 }

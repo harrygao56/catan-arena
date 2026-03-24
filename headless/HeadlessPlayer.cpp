@@ -318,10 +318,18 @@ int HeadlessPlayer::place_settlement(Catan& game, bool first_round) {
 }
 
 // ============================================================
-// place_road  (called during first_round only in headless flow)
+// place_road  (called during first_round only in headless flow, or via RoadBuildCard)
 // ============================================================
 
 void HeadlessPlayer::place_road(Catan& game, bool first_round) {
+    // When called from RoadBuildCard, use the pre-parsed pending edges instead
+    // of doing a full JSON round-trip.
+    if (using_pending_roads_) {
+        int edge = (pending_road_call_count_++ == 0) ? pending_edge1_ : pending_edge2_;
+        try { game.place_road(edge, *this, first_round); } catch (std::exception& e) { (void)e; }
+        return;
+    }
+
     current_game_ = &game;
 
     // The last_settlement vertex is tracked by Catan::first_round calling
@@ -563,69 +571,52 @@ void HeadlessPlayer::handle_play_dev_card_line(Catan& game, const std::string& l
     std::string card_type_str = get_string(line, "card_type");
 
     if (card_type_str == "knight") {
-        // KnightCard is not a PromotionCard; play_dev_card does nothing for it.
-        // The knight was already counted at buy time.
-        // We call the base class play_dev_card(game, card) which does nothing but
-        // does NOT remove the card (matching original behavior).
         Card* card = get_dev_card(CardType::KNIGHT);
-        if (card) {
-            Player::play_dev_card(game, card);
-            // card stays in hand per original code (no removal for non-PromotionCard)
-        }
+        if (card) Player::play_dev_card(game, card);
         return;
     }
 
     if (card_type_str == "road_building") {
+        // Store pending edges; place_road override will consume them.
+        pending_edge1_ = get_int(line, "edge1", -1);
+        pending_edge2_ = get_int(line, "edge2", -1);
+        using_pending_roads_ = true;
+        pending_road_call_count_ = 0;
+
         Card* card = get_dev_card(CardType::ROAD_BUILDING);
-        if (!card) return;
+        if (card) Player::play_dev_card(game, card);  // → RoadBuildCard::use() → place_road() x2
 
-        int edge1 = get_int(line, "edge1");
-        int edge2 = get_int(line, "edge2");
-
-        try { game.place_road(edge1, *this, true); } catch (std::exception& e) { (void)e; }
-        try { game.place_road(edge2, *this, true); } catch (std::exception& e) { (void)e; }
-
-        // Remove card from hand (it IS a PromotionCard)
-        remove_dev_card(card);
-        delete card;
+        using_pending_roads_ = false;
+        pending_road_call_count_ = 0;
         return;
     }
 
     if (card_type_str == "monopoly") {
+        pending_monopoly_res_ = resource::from_int(get_int(line, "resource", 0));
         Card* card = get_dev_card(CardType::MONOPOLY);
-        if (!card) return;
-
-        int res_int = get_int(line, "resource", 0);
-        resource res = resource::from_int(res_int);
-
-        for (Player* other : game.get_players()) {
-            if (other == this) continue;
-            int count = other->get_resource_count(res);
-            if (count > 0) {
-                other->use_resource(res, count);
-                add_resource(res, count);
-            }
-        }
-
-        remove_dev_card(card);
-        delete card;
+        if (card) Player::play_dev_card(game, card);  // → MonopolyCard::use() → choose_monopoly_resource()
         return;
     }
 
     if (card_type_str == "year_of_plenty") {
+        pending_yop_res1_ = resource::from_int(get_int(line, "res1", 0));
+        pending_yop_res2_ = resource::from_int(get_int(line, "res2", 0));
         Card* card = get_dev_card(CardType::YEAR_OF_PLENTY);
-        if (!card) return;
-
-        int res1_int = get_int(line, "res1", 0);
-        int res2_int = get_int(line, "res2", 0);
-
-        add_resource(resource::from_int(res1_int), 1);
-        add_resource(resource::from_int(res2_int), 1);
-
-        remove_dev_card(card);
-        delete card;
+        if (card) Player::play_dev_card(game, card);  // → YearOfPlentyCard::use() → choose_year_of_plenty_resources()
         return;
     }
+}
+
+// ============================================================
+// choose_monopoly_resource / choose_year_of_plenty_resources
+// ============================================================
+
+resource HeadlessPlayer::choose_monopoly_resource(Catan& /*game*/) {
+    return pending_monopoly_res_;
+}
+
+std::pair<resource, resource> HeadlessPlayer::choose_year_of_plenty_resources(Catan& /*game*/) {
+    return {pending_yop_res1_, pending_yop_res2_};
 }
 
 // ============================================================
