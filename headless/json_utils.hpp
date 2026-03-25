@@ -12,6 +12,20 @@ inline std::string quote(const std::string& s) {
     return "\"" + s + "\"";
 }
 
+inline std::string quote_multiline(const std::string& s) {
+    std::string out = "\"";
+    for (char c : s) {
+        if (c == '"') out += "\\\"";
+        else if (c == '\\') out += "\\\\";
+        else if (c == '\n') out += "\\n";
+        else if (c == '\r') out += "\\r";
+        else if (c == '\t') out += "\\t";
+        else out += c;
+    }
+    out += "\"";
+    return out;
+}
+
 // "key":"val"
 inline std::string kv(const std::string& key, const std::string& val) {
     return quote(key) + ":" + quote(val);

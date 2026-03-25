@@ -3,6 +3,7 @@
 
 #include <ctime>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 
 #include "cards/KnightCard.hpp"
@@ -1010,4 +1011,132 @@ void Catan::display_board() {
          << "         " << vertices[47].get_settlement_string() << "   " << vertices[39].get_resources()[0].second << "  " << vertices[48].get_settlement_string() << "   " << vertices[40].get_resources()[0].second << "  " << vertices[49].get_settlement_string() << "   " << vertices[41].get_resources()[0].second << " " << vertices[50].get_settlement_string() << "\n"
          << "           " << edges[66].get_color_code() << "\\   " << edges[67].get_color_code() << "/  " << edges[68].get_color_code() << "\\   " << edges[69].get_color_code() << "/  " << edges[70].get_color_code() << "\\   " << edges[71].get_color_code() << "/\033[0m\n"
          << "             " << vertices[51].get_settlement_string() << "      " << vertices[52].get_settlement_string() << "       " << vertices[53].get_settlement_string() << "\n";
+}
+
+std::string Catan::board_to_string() {
+    // Helper: render a vertex as [ID:X]
+    auto vt = [&](int id) -> std::string {
+        LandVertex& v = vertices[id];
+        // zero-pad id
+        std::string sid = (id < 10 ? "0" : "") + std::to_string(id);
+        Player* owner = v.get_owner();
+        std::string mark;
+        if (owner == nullptr) {
+            mark = "  ";
+        } else {
+            std::string col = owner->get_color();
+            char initial = (col.find("RED") != std::string::npos) ? 'R' :
+                           (col.find("BLUE") != std::string::npos) ? 'B' : 'Y';
+            if (v.is_contains_city()) {
+                mark = std::string(1, initial) + "*";
+            } else {
+                mark = std::string(1, initial) + " ";
+            }
+        }
+        return "[" + sid + ":" + mark + "]";
+    };
+
+    // Helper: render a diagonal edge as /X or \X
+    auto ed = [&](int id, char slash) -> std::string {
+        RoadEdge& e = edges[id];
+        Player* owner = e.get_owner();
+        char c = ' ';
+        if (owner != nullptr) {
+            std::string col = owner->get_color();
+            c = (col.find("RED") != std::string::npos) ? 'R' :
+                (col.find("BLUE") != std::string::npos) ? 'B' : 'Y';
+        }
+        return std::string(1, slash) + c;
+    };
+
+    // Helper: render a vertical edge as |X
+    auto ev = [&](int id) -> std::string {
+        RoadEdge& e = edges[id];
+        Player* owner = e.get_owner();
+        char c = ' ';
+        if (owner != nullptr) {
+            std::string col = owner->get_color();
+            c = (col.find("RED") != std::string::npos) ? 'R' :
+                (col.find("BLUE") != std::string::npos) ? 'B' : 'Y';
+        }
+        return std::string("|") + c;
+    };
+
+    // Helper: resource abbreviation
+    auto res_abbr = [](resource r) -> std::string {
+        switch (static_cast<resource::Value>(r.get_int())) {
+            case resource::WOOD:   return "WO";
+            case resource::CLAY:   return "CL";
+            case resource::SHEEP:  return "SH";
+            case resource::WHEAT:  return "WH";
+            case resource::STONE:  return "ST";
+            case resource::DESERT: return "DS";
+            default:               return "??";
+        }
+    };
+
+    // Helper: hex center line: "RES/NUM" (5 chars wide, padded)
+    // Each hex is identified by the vertex that holds its resources.
+    auto hex = [&](int vid) -> std::string {
+        auto resources = vertices[vid].get_resources();  // copy to avoid dangling ref
+        if (resources.empty()) return "??/? ";
+        resource r = resources[0].first;
+        int num = resources[0].second;
+        std::string abbr = res_abbr(r);
+        std::string s = abbr + "/" + std::to_string(num);
+        // pad to 5 chars
+        while ((int)s.size() < 5) s += " ";
+        return s;
+    };
+
+    std::ostringstream o;
+
+    // Row A: vertices 0, 1, 2
+    o << "            " << vt(0) << "      " << vt(1) << "       " << vt(2) << "\n";
+    // Diagonal edges row 0..5
+    o << "          " << ed(0,'/') << "   " << ed(1,'\\') << "  " << ed(2,'/') << "   " << ed(3,'\\') << "   " << ed(4,'/') << "   " << ed(5,'\\') << "\n";
+    // Row B: vertices 3, 4, 5, 6
+    o << "         " << vt(3) << "     " << vt(4) << "       " << vt(5) << "      " << vt(6) << "\n";
+    // Vertical edges 6..9 + hex resource row (using vertices 0,1,2)
+    o << "         " << ev(6) << " " << hex(0) << " " << ev(7) << "  " << hex(1) << "   " << ev(8) << "  " << hex(2) << "  " << ev(9) << "\n";
+    // Row C: vertices 7, 8, 9, 10
+    o << "         " << vt(7) << "      " << vt(8) << "       " << vt(9) << "      " << vt(10) << "\n";
+    // Diagonal edges row 10..17
+    o << "       " << ed(10,'/') << "   " << ed(11,'\\') << " " << ed(12,'/') << "   " << ed(13,'\\') << "   " << ed(14,'/') << "   " << ed(15,'\\') << "  " << ed(16,'/') << "   " << ed(17,'\\') << "\n";
+    // Row D: vertices 11..15
+    o << "      " << vt(11) << "     " << vt(12) << "      " << vt(13) << "      " << vt(14) << "      " << vt(15) << "\n";
+    // Vertical edges 18..22 + hex resource row (using vertices 7,8,9,10)
+    o << "      " << ev(18) << " " << hex(7) << "  " << ev(19) << "  " << hex(8) << "  " << ev(20) << "  " << hex(9) << "  " << ev(21) << "  " << hex(10) << "  " << ev(22) << "\n";
+    // Row E: vertices 16..20
+    o << "      " << vt(16) << "      " << vt(17) << "       " << vt(18) << "      " << vt(19) << "      " << vt(20) << "\n";
+    // Diagonal edges row 23..32
+    o << "    " << ed(23,'/') << "   " << ed(24,'\\') << " " << ed(25,'/') << "   " << ed(26,'\\') << "   " << ed(27,'/') << "   " << ed(28,'\\') << " " << ed(29,'/') << "   " << ed(30,'\\') << "  " << ed(31,'/') << "   " << ed(32,'\\') << "\n";
+    // Row F: vertices 21..26
+    o << "   " << vt(21) << "     " << vt(22) << "      " << vt(23) << "      " << vt(24) << "     " << vt(25) << "      " << vt(26) << "\n";
+    // Vertical edges 33..38 + hex resource row (using vertices 16..20)
+    o << "   " << ev(33) << " " << hex(16) << "  " << ev(34) << "  " << hex(17) << "  " << ev(35) << "  " << hex(18) << "   " << ev(36) << " " << hex(19) << "  " << ev(37) << "  " << hex(20) << "  " << ev(38) << "\n";
+    // Row G: vertices 27..32
+    o << "   " << vt(27) << "      " << vt(28) << "      " << vt(29) << "       " << vt(30) << "      " << vt(31) << "       " << vt(32) << "\n";
+    // Diagonal edges row 39..48 (going down-left then down-right)
+    o << "    " << ed(39,'\\') << "   " << ed(40,'/') << " " << ed(41,'\\') << "    " << ed(42,'/') << "   " << ed(43,'\\') << " " << ed(44,'/') << "   " << ed(45,'\\') << " " << ed(46,'/') << "   " << ed(47,'\\') << "   " << ed(48,'/') << "\n";
+    // Row H: vertices 33..37
+    o << "      " << vt(33) << "     " << vt(34) << "      " << vt(35) << "      " << vt(36) << "      " << vt(37) << "\n";
+    // Vertical edges 49..53 + hex resource row (using vertices 28..31)
+    o << "      " << ev(49) << " " << hex(28) << "  " << ev(50) << "  " << hex(29) << "  " << ev(51) << "  " << hex(30) << "  " << ev(52) << "  " << hex(31) << "  " << ev(53) << "\n";
+    // Row I: vertices 38..42
+    o << "      " << vt(38) << "      " << vt(39) << "       " << vt(40) << "      " << vt(41) << "      " << vt(42) << "\n";
+    // Diagonal edges row 54..61
+    o << "       " << ed(54,'\\') << "   " << ed(55,'/') << "  " << ed(56,'\\') << "   " << ed(57,'/') << "  " << ed(58,'\\') << "   " << ed(59,'/') << "  " << ed(60,'\\') << "   " << ed(61,'/') << "\n";
+    // Row J: vertices 43..46
+    o << "         " << vt(43) << "      " << vt(44) << "      " << vt(45) << "      " << vt(46) << "\n";
+    // Vertical edges 62..65 + hex resource row (using vertices 39..41)
+    o << "         " << ev(62) << "  " << hex(39) << "  " << ev(63) << "  " << hex(40) << "  " << ev(64) << "  " << hex(41) << "  " << ev(65) << "\n";
+    // Row K: vertices 47..50
+    o << "         " << vt(47) << "      " << vt(48) << "       " << vt(49) << "      " << vt(50) << "\n";
+    // Diagonal edges row 66..71
+    o << "           " << ed(66,'\\') << "   " << ed(67,'/') << "  " << ed(68,'\\') << "   " << ed(69,'/') << "  " << ed(70,'\\') << "   " << ed(71,'/') << "\n";
+    // Row L: vertices 51..53
+    o << "             " << vt(51) << "      " << vt(52) << "       " << vt(53) << "\n";
+
+    return o.str();
 }

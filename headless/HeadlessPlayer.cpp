@@ -170,6 +170,7 @@ std::string HeadlessPlayer::build_game_state(Catan& game) {
     std::string state =
         "\"players\":[" + players_json + "]," +
         "\"board\":{\"vertices\":[" + verts_json + "],\"edges\":[" + edges_json + "]}," +
+        "\"board_ascii\":" + json_utils::quote_multiline(game.board_to_string()) + "," +
         kv("current_player", my_color_name()) + "," +
         kv("dev_cards_remaining", static_cast<int>(game.get_dev_cards().size()));
 

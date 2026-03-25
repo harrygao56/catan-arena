@@ -97,6 +97,7 @@ class Catan {
      * @brief print to the stdout the board
      */
     void display_board();
+    std::string board_to_string();
 
     /**
      * @brief check if the game is over
