@@ -17,6 +17,13 @@ using namespace json_utils;
 
 static constexpr int MAX_ACTION_RETRIES = 20;
 
+// RAII guard that restores std::cin's streambuf on scope exit (even on exception).
+struct CinRestore {
+    std::streambuf* saved_;
+    explicit CinRestore(std::streambuf* new_buf) : saved_(std::cin.rdbuf(new_buf)) {}
+    ~CinRestore() { std::cin.rdbuf(saved_); }
+};
+
 // ============================================================
 // Constructor
 // ============================================================
@@ -275,12 +282,11 @@ void HeadlessPlayer::play_turn(Catan& game) {
 
             std::string line = read_line();
             std::string action = get_string(line, "action");
-            retries++;
+            // retries only incremented for unknown/invalid actions, not valid ones
 
             if (action == "end_turn") {
                 break;
-            }
-            if (action == "place_settlement") {
+            } else if (action == "place_settlement") {
                 int vertex = get_int(line, "vertex");
                 try { game.place_settlement(vertex, *this); } catch (std::exception& e) { (void)e; }
             } else if (action == "place_road") {
@@ -297,9 +303,9 @@ void HeadlessPlayer::play_turn(Catan& game) {
                 return;  // playing a dev card ends the turn
             } else if (action == "trade") {
                 try { handle_trade_line(game, line); } catch (std::exception& e) { (void)e; }
+            } else {
+                retries++;  // unknown action — count against retry limit
             }
-            // unknown actions are silently ignored; retries NOT incremented for valid actions
-            // (already incremented above — each action costs a retry to avoid infinite loops)
         }
         // if retries exhausted, default to end_turn (just fall through)
     }
@@ -450,8 +456,8 @@ void HeadlessPlayer::place_city(Catan& game) {
 
 void HeadlessPlayer::make_trade(Catan& game) {
     current_game_ = &game;
-    // Re-use the same logic as in play_turn for trade actions
-    while (true) {
+    int retries = 0;
+    while (retries < MAX_ACTION_RETRIES) {
         std::string msg =
             "{\"type\":\"action_request\","
             "\"player\":" + quote(my_color_name()) + ","
@@ -462,7 +468,7 @@ void HeadlessPlayer::make_trade(Catan& game) {
 
         std::string line = read_line();
         std::string action = get_string(line, "action");
-        if (action != "trade") continue;
+        if (action != "trade") { retries++; continue; }
 
         try {
             handle_trade_line(game, line);
@@ -470,8 +476,10 @@ void HeadlessPlayer::make_trade(Catan& game) {
             return;
         } catch (std::exception& e) {
             (void)e;
+            retries++;
         }
     }
+    current_game_ = nullptr;
 }
 
 // ============================================================
@@ -671,12 +679,10 @@ void HeadlessPlayer::handle_play_dev_card_line(Catan& game, const std::string& l
         int res_int = get_int(line, "resource", 0);  // 0-indexed from JSON
         // MonopolyCard::use() expects 1-indexed (1-5) from cin
         std::istringstream injected(std::to_string(res_int + 1) + "\n");
-        std::streambuf* prev_cin = std::cin.rdbuf(injected.rdbuf());
+        CinRestore guard(injected.rdbuf());  // restores cin even if play_dev_card throws
 
         Card* card = get_dev_card(CardType::MONOPOLY);
-        if (card) Player::play_dev_card(game, card);  // calls MonopolyCard::use() which reads from injected stream
-
-        std::cin.rdbuf(prev_cin);  // restore cin
+        if (card) Player::play_dev_card(game, card);
         return;
     }
 
@@ -687,12 +693,10 @@ void HeadlessPlayer::handle_play_dev_card_line(Catan& game, const std::string& l
             std::to_string(res1_int + 1) + "\n" +
             std::to_string(res2_int + 1) + "\n"
         );
-        std::streambuf* prev_cin = std::cin.rdbuf(injected.rdbuf());
+        CinRestore guard(injected.rdbuf());  // restores cin even if play_dev_card throws
 
         Card* card = get_dev_card(CardType::YEAR_OF_PLENTY);
         if (card) Player::play_dev_card(game, card);
-
-        std::cin.rdbuf(prev_cin);
         return;
     }
 }
