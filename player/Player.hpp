@@ -163,17 +163,4 @@ class Player {
      */
     bool operator!=(const Player& other) const;
 
-    // ---- I/O choice methods (overridable for headless play) ----
-
-    /**
-     * @brief Choose which resource to monopolize (called by MonopolyCard::use).
-     * Default implementation reads from stdin.
-     */
-    virtual resource choose_monopoly_resource(Catan& game);
-
-    /**
-     * @brief Choose two resources to take (called by YearOfPlentyCard::use).
-     * Default implementation reads from stdin.
-     */
-    virtual std::pair<resource, resource> choose_year_of_plenty_resources(Catan& game);
 };

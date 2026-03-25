@@ -2,6 +2,7 @@
 #include "HeadlessPlayer.hpp"
 
 #include <algorithm>
+#include <sstream>
 #include <stdexcept>
 
 #include "../Catan.hpp"
@@ -592,31 +593,33 @@ void HeadlessPlayer::handle_play_dev_card_line(Catan& game, const std::string& l
     }
 
     if (card_type_str == "monopoly") {
-        pending_monopoly_res_ = resource::from_int(get_int(line, "resource", 0));
+        int res_int = get_int(line, "resource", 0);  // 0-indexed from JSON
+        // MonopolyCard::use() expects 1-indexed (1-5) from cin
+        std::istringstream injected(std::to_string(res_int + 1) + "\n");
+        std::streambuf* prev_cin = std::cin.rdbuf(injected.rdbuf());
+
         Card* card = get_dev_card(CardType::MONOPOLY);
-        if (card) Player::play_dev_card(game, card);  // → MonopolyCard::use() → choose_monopoly_resource()
+        if (card) Player::play_dev_card(game, card);  // calls MonopolyCard::use() which reads from injected stream
+
+        std::cin.rdbuf(prev_cin);  // restore cin
         return;
     }
 
     if (card_type_str == "year_of_plenty") {
-        pending_yop_res1_ = resource::from_int(get_int(line, "res1", 0));
-        pending_yop_res2_ = resource::from_int(get_int(line, "res2", 0));
+        int res1_int = get_int(line, "res1", 0);  // 0-indexed
+        int res2_int = get_int(line, "res2", 0);  // 0-indexed
+        std::istringstream injected(
+            std::to_string(res1_int + 1) + "\n" +
+            std::to_string(res2_int + 1) + "\n"
+        );
+        std::streambuf* prev_cin = std::cin.rdbuf(injected.rdbuf());
+
         Card* card = get_dev_card(CardType::YEAR_OF_PLENTY);
-        if (card) Player::play_dev_card(game, card);  // → YearOfPlentyCard::use() → choose_year_of_plenty_resources()
+        if (card) Player::play_dev_card(game, card);
+
+        std::cin.rdbuf(prev_cin);
         return;
     }
-}
-
-// ============================================================
-// choose_monopoly_resource / choose_year_of_plenty_resources
-// ============================================================
-
-resource HeadlessPlayer::choose_monopoly_resource(Catan& /*game*/) {
-    return pending_monopoly_res_;
-}
-
-std::pair<resource, resource> HeadlessPlayer::choose_year_of_plenty_resources(Catan& /*game*/) {
-    return {pending_yop_res1_, pending_yop_res2_};
 }
 
 // ============================================================

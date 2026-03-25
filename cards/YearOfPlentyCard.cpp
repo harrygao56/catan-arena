@@ -20,7 +20,20 @@ Card* YearOfPlentyCard::clone() const {
 }
 
 void YearOfPlentyCard::use(Catan& game, Player& player) {
-    auto [res1, res2] = player.choose_year_of_plenty_resources(game);
+    std::cout << "Choose two resources to gain from the bank.\n"
+              << "\t1. Wood\n\t2. Clay\n\t3. Sheep\n\t4. Wheat\n\t5. Stone\n";
+
+    int resource1 = 0, resource2 = 0;
+    std::cin >> resource1;
+    std::cin >> resource2;
+
+    if (resource1 < 1 || resource1 > 5 || resource2 < 1 || resource2 > 5) {
+        throw std::invalid_argument("Invalid resource choice");
+    }
+
+    resource res1 = resource::from_int(resource1 - 1);
+    resource res2 = resource::from_int(resource2 - 1);
+
     player.add_resource(res1, 1);
     player.add_resource(res2, 1);
 }
