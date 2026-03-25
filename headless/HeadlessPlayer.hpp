@@ -3,6 +3,7 @@
 // using the terminal interactively.
 #pragma once
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,13 @@
 
 // Forward declarations
 class Catan;
+
+// Thrown when stdin is closed (orchestrator disconnected)
+class OrchestratorDisconnected : public std::runtime_error {
+   public:
+    OrchestratorDisconnected()
+        : std::runtime_error("Orchestrator disconnected (stdin EOF)") {}
+};
 
 class HeadlessPlayer : public Player {
    public:

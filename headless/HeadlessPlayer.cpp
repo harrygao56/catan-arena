@@ -15,6 +15,8 @@
 
 using namespace json_utils;
 
+static constexpr int MAX_ACTION_RETRIES = 20;
+
 // ============================================================
 // Constructor
 // ============================================================
@@ -78,10 +80,10 @@ void HeadlessPlayer::emit(const std::string& json_line) {
 std::string HeadlessPlayer::read_line() {
     std::string line;
     while (std::getline(std::cin, line)) {
-        // skip blank lines
         if (!line.empty()) return line;
     }
-    return "";
+    // stdin closed
+    throw OrchestratorDisconnected();
 }
 
 // ============================================================
@@ -94,16 +96,25 @@ std::string HeadlessPlayer::build_game_state(Catan& game) {
     for (Player* p : game.get_players()) {
         if (!players_json.empty()) players_json += ",";
 
-        std::string dev_arr;
-        for (Card* c : p->get_dev_cards()) {
-            if (!dev_arr.empty()) dev_arr += ",";
-            dev_arr += quote(card_type_name(c->type()));
+        bool is_self = (p == this);
+
+        std::string dev_section;
+        if (is_self) {
+            std::string dev_arr;
+            for (Card* c : p->get_dev_cards()) {
+                if (!dev_arr.empty()) dev_arr += ",";
+                dev_arr += quote(card_type_name(c->type()));
+            }
+            dev_section = "\"dev_cards\":[" + dev_arr + "]";
+        } else {
+            dev_section = kv("dev_cards_count", (int)p->get_dev_cards().size());
         }
 
         std::string pj =
             kv("color", plain_color_of(p)) + "," +
             kv("vp", p->get_victory_points()) + "," +
             kv("knights", p->get_knights()) + "," +
+            kv("is_self", is_self) + "," +
             "\"resources\":{" +
                 kv("wood",  p->get_resource_count(resource::WOOD))  + "," +
                 kv("clay",  p->get_resource_count(resource::CLAY))  + "," +
@@ -111,7 +122,7 @@ std::string HeadlessPlayer::build_game_state(Catan& game) {
                 kv("wheat", p->get_resource_count(resource::WHEAT)) + "," +
                 kv("stone", p->get_resource_count(resource::STONE)) +
             "}," +
-            "\"dev_cards\":[" + dev_arr + "]," +
+            dev_section + "," +
             kv("total_resources", p->get_total_resources());
         players_json += "{" + pj + "}";
     }
@@ -214,69 +225,83 @@ void HeadlessPlayer::play_turn(Catan& game) {
     current_game_ = &game;
 
     // ---- Phase 1: pre-roll ----
-    while (true) {
-        std::string msg =
-            "{\"type\":\"action_request\","
-            "\"player\":" + quote(my_color_name()) + ","
-            "\"phase\":\"pre_roll\","
-            "\"game_state\":" + build_game_state(game) + ","
-            "\"legal_actions\":" + build_legal_actions_pre_roll(game) +
-            "}";
-        emit(msg);
+    {
+        int retries = 0;
+        while (retries < MAX_ACTION_RETRIES) {
+            std::string msg =
+                "{\"type\":\"action_request\","
+                "\"player\":" + quote(my_color_name()) + ","
+                "\"phase\":\"pre_roll\","
+                "\"game_state\":" + build_game_state(game) + ","
+                "\"legal_actions\":" + build_legal_actions_pre_roll(game) +
+                "}";
+            emit(msg);
 
-        std::string line = read_line();
-        std::string action = get_string(line, "action");
+            std::string line = read_line();
+            std::string action = get_string(line, "action");
+            retries++;
 
-        if (action == "roll_dice") {
+            if (action == "roll_dice") {
+                game.roll_dice();
+                break;
+            }
+            if (action == "play_dev_card") {
+                handle_play_dev_card_line(game, line);
+                current_game_ = nullptr;
+                return;
+            }
+            // ignore unknown / invalid actions — loop and re-prompt
+        }
+        if (retries >= MAX_ACTION_RETRIES) {
+            // default: just roll dice
             game.roll_dice();
-            break;
         }
-        if (action == "play_dev_card") {
-            handle_play_dev_card_line(game, line);
-            current_game_ = nullptr;
-            return;
-        }
-        // ignore unknown / invalid actions
     }
 
     // ---- Phase 2: post-roll ----
-    while (true) {
-        int dice = game.get_last_dice_sum();
-        std::string msg =
-            "{\"type\":\"action_request\","
-            "\"player\":" + quote(my_color_name()) + ","
-            "\"phase\":\"post_roll\","
-            "\"dice\":" + std::to_string(dice) + ","
-            "\"game_state\":" + build_game_state(game) + ","
-            "\"legal_actions\":" + build_legal_actions_post_roll(game) +
-            "}";
-        emit(msg);
+    {
+        int retries = 0;
+        while (retries < MAX_ACTION_RETRIES) {
+            int dice = game.get_last_dice_sum();
+            std::string msg =
+                "{\"type\":\"action_request\","
+                "\"player\":" + quote(my_color_name()) + ","
+                "\"phase\":\"post_roll\","
+                "\"dice\":" + std::to_string(dice) + ","
+                "\"game_state\":" + build_game_state(game) + ","
+                "\"legal_actions\":" + build_legal_actions_post_roll(game) +
+                "}";
+            emit(msg);
 
-        std::string line = read_line();
-        std::string action = get_string(line, "action");
+            std::string line = read_line();
+            std::string action = get_string(line, "action");
+            retries++;
 
-        if (action == "end_turn") {
-            break;
+            if (action == "end_turn") {
+                break;
+            }
+            if (action == "place_settlement") {
+                int vertex = get_int(line, "vertex");
+                try { game.place_settlement(vertex, *this); } catch (std::exception& e) { (void)e; }
+            } else if (action == "place_road") {
+                int edge = get_int(line, "edge");
+                try { game.place_road(edge, *this); } catch (std::exception& e) { (void)e; }
+            } else if (action == "place_city") {
+                int vertex = get_int(line, "vertex");
+                try { game.place_city(vertex, *this); } catch (std::exception& e) { (void)e; }
+            } else if (action == "buy_dev_card") {
+                try { buy_dev_card(game); } catch (std::exception& e) { (void)e; }
+            } else if (action == "play_dev_card") {
+                handle_play_dev_card_line(game, line);
+                current_game_ = nullptr;
+                return;  // playing a dev card ends the turn
+            } else if (action == "trade") {
+                try { handle_trade_line(game, line); } catch (std::exception& e) { (void)e; }
+            }
+            // unknown actions are silently ignored; retries NOT incremented for valid actions
+            // (already incremented above — each action costs a retry to avoid infinite loops)
         }
-        if (action == "place_settlement") {
-            int vertex = get_int(line, "vertex");
-            try { game.place_settlement(vertex, *this); } catch (std::exception& e) { (void)e; }
-        } else if (action == "place_road") {
-            int edge = get_int(line, "edge");
-            try { game.place_road(edge, *this); } catch (std::exception& e) { (void)e; }
-        } else if (action == "place_city") {
-            int vertex = get_int(line, "vertex");
-            try { game.place_city(vertex, *this); } catch (std::exception& e) { (void)e; }
-        } else if (action == "buy_dev_card") {
-            try { buy_dev_card(game); } catch (std::exception& e) { (void)e; }
-        } else if (action == "play_dev_card") {
-            handle_play_dev_card_line(game, line);
-            current_game_ = nullptr;
-            return;  // playing a dev card ends the turn
-        } else if (action == "trade") {
-            try { handle_trade_line(game, line); } catch (std::exception& e) { (void)e; }
-        }
-        // unknown actions are silently ignored
+        // if retries exhausted, default to end_turn (just fall through)
     }
 
     current_game_ = nullptr;
@@ -292,7 +317,8 @@ int HeadlessPlayer::place_settlement(Catan& game, bool first_round) {
     std::string phase = first_round ? "first_round_settlement" : "place_settlement";
     auto legal = game.get_legal_settlement_spots(*this, first_round);
 
-    while (true) {
+    int retries = 0;
+    while (retries < MAX_ACTION_RETRIES) {
         std::string msg =
             "{\"type\":\"action_request\","
             "\"player\":" + quote(my_color_name()) + ","
@@ -304,6 +330,7 @@ int HeadlessPlayer::place_settlement(Catan& game, bool first_round) {
 
         std::string line = read_line();
         std::string action = get_string(line, "action");
+        retries++;
         if (action != "place_settlement") continue;
 
         int vertex = get_int(line, "vertex");
@@ -316,6 +343,16 @@ int HeadlessPlayer::place_settlement(Catan& game, bool first_round) {
             (void)e;
         }
     }
+    // default: pick first legal spot
+    if (!legal.empty()) {
+        try {
+            game.place_settlement(legal[0], *this, first_round);
+        } catch (std::exception& e) { (void)e; }
+        current_game_ = nullptr;
+        return legal[0];
+    }
+    current_game_ = nullptr;
+    return -1;
 }
 
 // ============================================================
@@ -339,7 +376,8 @@ void HeadlessPlayer::place_road(Catan& game, bool first_round) {
     std::string phase = first_round ? "first_round_road" : "place_road";
     auto legal = game.get_legal_road_spots(*this, first_round);
 
-    while (true) {
+    int retries = 0;
+    while (retries < MAX_ACTION_RETRIES) {
         std::string msg =
             "{\"type\":\"action_request\","
             "\"player\":" + quote(my_color_name()) + ","
@@ -351,6 +389,7 @@ void HeadlessPlayer::place_road(Catan& game, bool first_round) {
 
         std::string line = read_line();
         std::string action = get_string(line, "action");
+        retries++;
         if (action != "place_road") continue;
 
         int edge = get_int(line, "edge");
@@ -362,6 +401,11 @@ void HeadlessPlayer::place_road(Catan& game, bool first_round) {
             (void)e;
         }
     }
+    // default: pick first legal spot
+    if (!legal.empty()) {
+        try { game.place_road(legal[0], *this, first_round); } catch (std::exception& e) { (void)e; }
+    }
+    current_game_ = nullptr;
 }
 
 // ============================================================
@@ -372,7 +416,8 @@ void HeadlessPlayer::place_city(Catan& game) {
     current_game_ = &game;
     auto legal = game.get_legal_city_spots(*this);
 
-    while (true) {
+    int retries = 0;
+    while (retries < MAX_ACTION_RETRIES) {
         std::string msg =
             "{\"type\":\"action_request\","
             "\"player\":" + quote(my_color_name()) + ","
@@ -384,6 +429,7 @@ void HeadlessPlayer::place_city(Catan& game) {
 
         std::string line = read_line();
         std::string action = get_string(line, "action");
+        retries++;
         if (action != "place_city") continue;
 
         int vertex = get_int(line, "vertex");
@@ -395,6 +441,7 @@ void HeadlessPlayer::place_city(Catan& game) {
             (void)e;
         }
     }
+    current_game_ = nullptr;
 }
 
 // ============================================================
@@ -495,10 +542,15 @@ void HeadlessPlayer::robber() {
         "}}";
     emit(msg);
 
-    while (true) {
+    int retries = 0;
+    while (retries < MAX_ACTION_RETRIES) {
         std::string line = read_line();
         std::string action = get_string(line, "action");
-        if (action != "discard") continue;
+        retries++;
+        if (action != "discard") {
+            emit(msg);
+            continue;
+        }
 
         int w  = get_int(line, "wood",  0);
         int cl = get_int(line, "clay",  0);
@@ -528,6 +580,16 @@ void HeadlessPlayer::robber() {
         use_resource(resource::WHEAT, wh);
         use_resource(resource::STONE, st);
         return;
+    }
+    // discard greedily from cheapest resources
+    {
+        int remaining = must_discard;
+        for (auto res : {resource::WOOD, resource::CLAY, resource::SHEEP, resource::WHEAT, resource::STONE}) {
+            int take = std::min(get_resource_count(res), remaining);
+            if (take > 0) use_resource(res, take);
+            remaining -= take;
+            if (remaining == 0) break;
+        }
     }
 }
 
@@ -578,9 +640,22 @@ void HeadlessPlayer::handle_play_dev_card_line(Catan& game, const std::string& l
     }
 
     if (card_type_str == "road_building") {
-        // Store pending edges; place_road override will consume them.
-        pending_edge1_ = get_int(line, "edge1", -1);
-        pending_edge2_ = get_int(line, "edge2", -1);
+        int edge1 = get_int(line, "edge1", -1);
+        int edge2 = get_int(line, "edge2", -1);
+        auto legal = game.get_legal_road_spots(*this);
+
+        auto is_legal = [&](int e) {
+            return std::find(legal.begin(), legal.end(), e) != legal.end();
+        };
+
+        if (edge1 == -1 || edge2 == -1 || !is_legal(edge1) || !is_legal(edge2)) {
+            emit("{\"type\":\"error\",\"message\":\"invalid edges for road_building\","
+                 "\"legal_edges\":" + int_array(legal) + "}");
+            return;  // card NOT consumed; play_turn loop will re-prompt
+        }
+
+        pending_edge1_ = edge1;
+        pending_edge2_ = edge2;
         using_pending_roads_ = true;
         pending_road_call_count_ = 0;
 

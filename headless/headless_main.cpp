@@ -30,20 +30,26 @@ int main() {
     Catan catan(p1, p2, p3);
 
     // Run the game.
-    Player* winner = catan.start_game();
+    try {
+        Player* winner = catan.start_game();
 
-    // Determine plain color name of winner.
-    std::string winner_color = "UNKNOWN";
-    if (winner != nullptr) {
-        std::string c = winner->get_color();
-        if (c.find("RED")    != std::string::npos) winner_color = "RED";
-        else if (c.find("BLUE")   != std::string::npos) winner_color = "BLUE";
-        else if (c.find("YELLOW") != std::string::npos) winner_color = "YELLOW";
+        // Determine plain color name of winner.
+        std::string winner_color = "UNKNOWN";
+        if (winner != nullptr) {
+            std::string c = winner->get_color();
+            if (c.find("RED")    != std::string::npos) winner_color = "RED";
+            else if (c.find("BLUE")   != std::string::npos) winner_color = "BLUE";
+            else if (c.find("YELLOW") != std::string::npos) winner_color = "YELLOW";
+        }
+
+        // Emit game_over message.
+        proto << "{\"type\":\"game_over\",\"winner\":\"" << winner_color << "\"}" << "\n";
+        proto.flush();
+    } catch (const OrchestratorDisconnected& e) {
+        proto << "{\"type\":\"error\",\"message\":\"orchestrator_disconnected\"}\n";
+        proto.flush();
+        return 1;
     }
-
-    // Emit game_over message.
-    proto << "{\"type\":\"game_over\",\"winner\":\"" << winner_color << "\"}" << "\n";
-    proto.flush();
 
     return 0;
 }
