@@ -33,6 +33,7 @@ constexpr int TOTAL_DEV_CARDS = VP_CARDS + KNIGHT_CARDS + ROAD_BUILDING_CARDS + 
 class Catan {
    private:
     int current_player_index;
+    int last_dice_sum;
     vector<Player*> players;
     vector<LandVertex> vertices;
     vector<RoadEdge> edges;
@@ -75,6 +76,7 @@ class Catan {
     vector<RoadEdge>& get_edges() { return edges; }
     vector<Player*>& get_players() { return players; }
     vector<Card*>& get_dev_cards() { return dev_cards; }
+    int get_last_dice_sum() const { return last_dice_sum; }
 
     /**
      * @brief the first round of the game. each player places 2 settlements and 2 roads
@@ -95,6 +97,7 @@ class Catan {
      * @brief print to the stdout the board
      */
     void display_board();
+    std::string board_to_string();
 
     /**
      * @brief check if the game is over
@@ -165,4 +168,39 @@ class Catan {
     void play_dev_card(Player& player, Card* card);
 
     void make_trade_offer(Player& trader, const vector<pair<resource, int>>& offer_res, const vector<Card*>& offer_dev, const vector<pair<resource, int>>& request_res, const vector<pair<CardType, int>>& request_dev);
+
+    /**
+     * @brief Get valid vertex IDs for settlement placement
+     */
+    vector<int> get_legal_settlement_spots(Player& player, bool first_round = false);
+
+    /**
+     * @brief Get valid edge IDs for road placement
+     */
+    vector<int> get_legal_road_spots(Player& player, bool first_round = false);
+
+    /**
+     * @brief Get valid vertex IDs for city upgrade
+     */
+    vector<int> get_legal_city_spots(Player& player);
+
+    /**
+     * @brief Check if player can afford a dev card
+     */
+    bool can_buy_dev_card(Player& player);
+
+    /**
+     * @brief Check whether a settlement can be placed at the given vertex (geometry only, no resource check).
+     */
+    bool can_place_settlement(int vertex_id, Player& player, bool first_round = false);
+
+    /**
+     * @brief Check whether a road can be placed at the given edge (geometry only, no resource check).
+     */
+    bool can_place_road(int edge_id, Player& player, bool first_round = false);
+
+    /**
+     * @brief Check whether a city can be placed at the given vertex (geometry only, no resource check).
+     */
+    bool can_place_city(int vertex_id, Player& player);
 };

@@ -21,13 +21,9 @@ Card* YearOfPlentyCard::clone() const {
 
 void YearOfPlentyCard::use(Catan& game, Player& player) {
     std::cout << "Choose two resources to gain from the bank.\n"
-              << "\t1. Wood\n"
-              << "\t2. Clay\n"
-              << "\t3. Sheep\n"
-              << "\t4. Wheat\n"
-              << "\t5. Stone\n";
+              << "\t1. Wood\n\t2. Clay\n\t3. Sheep\n\t4. Wheat\n\t5. Stone\n";
 
-    int resource1 = 0 , resource2 = 0;
+    int resource1 = 0, resource2 = 0;
     std::cin >> resource1;
     std::cin >> resource2;
 
